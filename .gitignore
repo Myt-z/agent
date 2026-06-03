@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+rag/chroma_db/
+db/travel_planner.db
+chroma_db/
+.venv/
+*.egg-info/
+dist/
+.idea/
+test.py
