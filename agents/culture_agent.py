@@ -20,9 +20,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain_core.tools import tool
+from llm.factory import create_model
 
 from rag.knowledge_store import TravelKnowledgeBase
 
@@ -62,11 +62,7 @@ class CultureAgent:
     """
 
     def __init__(self):
-        self.model = ChatOpenAI(
-            model="deepseek-chat",
-            api_key=os.getenv("DEEPSEEK_API_KEY"),
-            base_url=os.getenv("DEEPSEEK_BASE_URL"),
-        )
+        self.model = create_model()
 
         @tool
         def search_culture_knowledge(query: str) -> str:

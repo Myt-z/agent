@@ -43,8 +43,8 @@ with st.sidebar:
     st.header("旅行需求")
 
     city = st.text_input(
-        "目的地（国内城市）",
-        placeholder="输入国内城市：西安 / 广州 / 成都 / 杭州 / 北京...",
+        "目的地（留空或输入"推荐"可智能推荐）",
+        placeholder="西安 / 广州 / 成都... 或留空让我推荐",
     )
 
     days = st.slider("游玩天数", min_value=1, max_value=14, value=3)
@@ -91,6 +91,9 @@ with st.sidebar:
             st.caption(f"{p['city']}（{p['cnt']} 次）")
 
     st.divider()
+    from llm.factory import get_model_info
+    info = get_model_info()
+    st.caption(f"环境: {info['env']} | 模型: {info.get('provider','mock')}/{info.get('model','')}")
     st.caption("技术栈：LangChain + ChromaDB + SQLite + DeepSeek")
 
 
@@ -101,30 +104,63 @@ if "loading" not in st.session_state:
     st.session_state.loading = False
 
 if go_button:
-    if not city.strip():
-        st.warning("请输入目的地城市")
+    from utils.safety import validate_city, get_submit_guard, sanitize_input
+
+    # 未输入城市 → 智能推荐模式
+    if not city.strip() or city.strip() in ("推荐", "不知道", "帮我选"):
+        guard = get_submit_guard()
+        lock_key = f"{st.session_state.username}-recommend-{days}"
+        if not guard.try_acquire(lock_key):
+            st.warning("正在推荐中，请稍候...")
+        else:
+            st.session_state._lock_key = lock_key
+            st.session_state._recommend_mode = True
+            st.session_state.loading = True
+            st.session_state.result = None
     else:
-        st.session_state.loading = True
-        st.session_state.result = None
+        city = sanitize_input(city)
+        valid, err = validate_city(city)
+        if not valid:
+            st.error(err)
+        else:
+            guard = get_submit_guard()
+            lock_key = f"{st.session_state.username}-{city}-{days}"
+            if not guard.try_acquire(lock_key):
+                st.warning("相同的规划正在进行中，请稍候...")
+            else:
+                st.session_state._lock_key = lock_key
+                st.session_state._recommend_mode = False
+                st.session_state.loading = True
+                st.session_state.result = None
 
 if st.session_state.loading:
-    with st.spinner(f"正在为你规划 {city} {days}日游..."):
-        coordinator = TravelCoordinator()
-        result = coordinator.plan(
-            city=city.strip(),
-            days=days,
-            budget=budget,
-            preferences=preferences,
-        )
-        st.session_state.result = result
+    if st.session_state.get("_recommend_mode"):
+        with st.spinner(f"正在根据 ¥{budget}/{days}天/「{preferences}」智能推荐目的地..."):
+            from agents.recommend_agent import RecommendAgent
+            rec = RecommendAgent()
+            result = rec.recommend(budget=budget, days=days, preferences=preferences)
+            st.session_state.result = result
+    else:
+        with st.spinner(f"正在为你规划 {city} {days}日游..."):
+            coordinator = TravelCoordinator()
+            result = coordinator.plan(
+                city=city.strip(),
+                days=days,
+                budget=budget,
+                preferences=preferences,
+            )
+            st.session_state.result = result
 
-        # 保存到 SQLite
-        if st.session_state.username.strip():
-            user_id = get_or_create_user(st.session_state.username.strip())
-            save_plan(user_id, city.strip(), days, budget, preferences, result)
+            # 保存到 SQLite
+            if st.session_state.username.strip():
+                user_id = get_or_create_user(st.session_state.username.strip())
+                save_plan(user_id, city.strip(), days, budget, preferences, result)
 
-        st.session_state.loading = False
-        st.rerun()
+    # 释放防重复锁
+    if "_lock_key" in st.session_state:
+        get_submit_guard().release(st.session_state._lock_key)
+    st.session_state.loading = False
+    st.rerun()
 
 if st.session_state.result:
     st.markdown(st.session_state.result)

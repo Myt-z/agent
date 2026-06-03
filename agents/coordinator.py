@@ -20,9 +20,9 @@ import os
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain_core.tools import tool
+from llm.factory import create_model
 
 from agents.itinerary_agent import ItineraryAgent
 from agents.budget_agent import BudgetAgent
@@ -82,11 +82,7 @@ class TravelCoordinator:
             return self.culture.explain(city, topics)
 
         # 主控模型
-        self.model = ChatOpenAI(
-            model="deepseek-chat",
-            api_key=os.getenv("DEEPSEEK_API_KEY"),
-            base_url=os.getenv("DEEPSEEK_BASE_URL"),
-        )
+        self.model = create_model()
 
         # 主控 Agent：system_prompt 定义了 SOP（标准操作流程）
         self.agent = create_agent(

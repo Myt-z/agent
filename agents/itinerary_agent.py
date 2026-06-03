@@ -20,8 +20,8 @@ import os
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
+from llm.factory import create_model
 from langchain_core.tools import tool
 
 from rag.knowledge_store import TravelKnowledgeBase
@@ -65,11 +65,7 @@ class ItineraryAgent:
 
     def __init__(self):
         # 1. 大模型
-        self.model = ChatOpenAI(
-            model="deepseek-chat",
-            api_key=os.getenv("DEEPSEEK_API_KEY"),
-            base_url=os.getenv("DEEPSEEK_BASE_URL"),
-        )
+        self.model = create_model()
 
         # 2. RAG 检索工具
         @tool

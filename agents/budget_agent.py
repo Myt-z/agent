@@ -19,8 +19,8 @@ import os
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
+from llm.factory import create_model
 
 from tools.travel_tools import calculate_budget, get_reference_price
 
@@ -33,11 +33,7 @@ class BudgetAgent:
     """
 
     def __init__(self):
-        self.model = ChatOpenAI(
-            model="deepseek-chat",
-            api_key=os.getenv("DEEPSEEK_API_KEY"),
-            base_url=os.getenv("DEEPSEEK_BASE_URL"),
-        )
+        self.model = create_model()
 
         self.tools = [calculate_budget, get_reference_price]
 
