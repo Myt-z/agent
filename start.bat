@@ -16,17 +16,15 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+:: 环境：dev=真实API+调试日志
+if "%APP_ENV%"=="" set APP_ENV=dev
+
+echo [ENV] APP_ENV=%APP_ENV%
+echo.
+
 echo [1/3] Checking dependencies...
 
-pip show streamlit >nul 2>&1
-if %errorlevel% neq 0 (
-    pip install streamlit -q
-)
-
-pip show ddgs >nul 2>&1
-if %errorlevel% neq 0 (
-    pip install ddgs -q
-)
+pip install -r requirements.txt -q 2>nul
 
 echo [OK] Dependencies ready
 echo.
