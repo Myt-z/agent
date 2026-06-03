@@ -4,17 +4,35 @@
 
 ## 快速开始
 
+### Docker（推荐，跨平台一键部署）
+
+```bash
+cp .env.example .env   # 编辑 .env 填入 API Key
+docker-compose up -d    # 浏览器打开 http://localhost:8501
+```
+
+### 本地运行
+
 ```bash
 # 1. 安装依赖
 pip install -r requirements.txt
 
-# 2. 配置 API Key（编辑 .env）
+# 2. 配置 .env
 DEEPSEEK_API_KEY=sk-your-key-here
 DEEPSEEK_BASE_URL=https://api.deepseek.com
+APP_ENV=dev
 
 # 3. 启动
 streamlit run app.py
-# 浏览器打开 http://localhost:8501
+# 或 Windows 双击 start.bat
+```
+
+### 环境切换
+
+```bash
+APP_ENV=test  pytest tests/ -v    # 沙盒测试，¥0 成本
+APP_ENV=dev   streamlit run app.py  # 开发，调试日志
+APP_ENV=prod  docker-compose up -d  # 生产，降级链+错误日志
 ```
 
 ## 项目结构

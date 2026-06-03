@@ -23,6 +23,9 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 from llm.factory import create_model
+from utils.logging import get_logger
+
+logger = get_logger("agents.coordinator")
 
 from agents.itinerary_agent import ItineraryAgent
 from agents.budget_agent import BudgetAgent
@@ -44,7 +47,7 @@ class TravelCoordinator:
 
     def __init__(self):
         # 初始化三个子 Agent（每个内部有自己的 model 和 tools）
-        print("[Coordinator] 初始化子 Agent...")
+        logger.info("初始化子 Agent")
         self.itinerary = ItineraryAgent()
         self.budget = BudgetAgent()
         self.culture = CultureAgent()
@@ -58,8 +61,12 @@ class TravelCoordinator:
             参数 days: 游玩天数
             参数 preferences: 偏好主题，如 历史文化、美食、自然风光
             """
-            print(f"  [调度] → 行程规划师正在规划 {city} {days}日游...")
-            return self.itinerary.plan(city, days, preferences)
+            logger.info(f"调度行程规划师 | city={city} days={days}")
+            try:
+                return self.itinerary.plan(city, days, preferences)
+            except Exception as e:
+                logger.error(f"行程规划师执行失败: {e}", exc_info=True)
+                return "## 行程安排\n\n该模块暂时不可用，请稍后重试。建议手动搜索目的地攻略。"
 
         @tool
         def analyze_budget(itinerary_text: str, total_budget: float) -> str:
@@ -68,8 +75,12 @@ class TravelCoordinator:
             参数 itinerary_text: 行程方案文本（从行程规划师那里获取）
             参数 total_budget: 用户的总预算上限（元）
             """
-            print(f"  [调度] → 预算师正在计算费用（预算上限 {total_budget} 元）...")
-            return self.budget.analyze(itinerary_text, total_budget)
+            logger.info(f"调度预算分析师 | budget={total_budget}")
+            try:
+                return self.budget.analyze(itinerary_text, total_budget)
+            except Exception as e:
+                logger.error(f"预算分析师执行失败: {e}", exc_info=True)
+                return "## 费用预算\n\n该模块暂时不可用，请稍后重试。参考日均花费约 300-500 元/天（含住宿餐饮）。"
 
         @tool
         def explain_culture(city: str, topics: str) -> str:
@@ -78,8 +89,12 @@ class TravelCoordinator:
             参数 city: 目的地城市名
             参数 topics: 想了解的文化主题，如 历史文化,风俗礼仪,当地美食文化
             """
-            print(f"  [调度] → 文化讲解员正在介绍 {city} 的文化...")
-            return self.culture.explain(city, topics)
+            logger.info(f"调度文化讲解员 | city={city}")
+            try:
+                return self.culture.explain(city, topics)
+            except Exception as e:
+                logger.error(f"文化讲解员执行失败: {e}", exc_info=True)
+                return "## 文化贴士\n\n该模块暂时不可用，请稍后重试。建议查看当地旅游局的官方网站了解文化习俗。"
 
         # 主控模型
         self.model = create_model()
@@ -122,6 +137,6 @@ class TravelCoordinator:
             f"- 总预算：{budget} 元\n"
             f"- 偏好：{preferences}\n"
         )
-        print(f"\n[Coordinator] 开始规划 {city} {days}日游，预算 {budget} 元\n")
+        logger.info(f"开始规划 | city={city} days={days} budget={budget} preferences={preferences}")
         result = self.agent.invoke({"messages": [{"role": "user", "content": prompt}]})
         return result["messages"][-1].content

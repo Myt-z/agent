@@ -9,3 +9,5 @@ chroma_db/
 dist/
 .idea/
 test.py
+logs/
+.pytest_cache/

@@ -25,6 +25,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+from utils.logging import get_logger
+
+logger = get_logger("rag.knowledge_store")
 
 # 简单规则：联网搜来的数据 30 天后自动刷新
 # 你手写的本地文档永不过期
@@ -55,7 +58,7 @@ class TravelKnowledgeBase:
         txt_files = list(self.data_dir.glob("*.txt"))
 
         if txt_files:
-            print(f"找到 {len(txt_files)} 个本地文档，开始建库...")
+            logger.info(f"找到 {len(txt_files)} 个本地文档，开始建库")
             for filepath in txt_files:
                 loader = TextLoader(str(filepath), encoding="utf-8")
                 docs = loader.load()
@@ -64,10 +67,10 @@ class TravelKnowledgeBase:
                 for chunk in chunks:
                     chunk.metadata["created_at"] = datetime.now().isoformat()
                     chunk.metadata["source_type"] = "local"
-                print(f"  {filepath.name}: {len(docs)} 个文档 -> {len(chunks)} 个 chunk")
+                logger.debug(f"  {filepath.name}: {len(docs)} 个文档 -> {len(chunks)} 个 chunk")
                 all_documents.extend(chunks)
 
-            print(f"共 {len(all_documents)} 个 chunk，正在向量化...")
+            logger.info(f"共 {len(all_documents)} 个 chunk，开始向量化")
 
             self.vector_store = Chroma.from_documents(
                 documents=all_documents,
@@ -77,7 +80,7 @@ class TravelKnowledgeBase:
             )
         else:
             # 没有本地文档，尝试加载已有向量库
-            print("无本地文档，尝试加载已有向量库...")
+            logger.info("无本地文档，尝试加载已有向量库")
             self.vector_store = Chroma(
                 embedding_function=self.embeddings,
                 collection_name="travel_knowledge",
@@ -85,7 +88,7 @@ class TravelKnowledgeBase:
             )
 
         count = self.vector_store._collection.count()
-        print(f"知识库就绪，共 {count} 条向量 (持久化: {self.persist_dir})")
+        logger.info(f"知识库就绪，共 {count} 条向量 | 持久化: {self.persist_dir}")
 
     def add_documents(self, documents: list[Document], source: str = "web") -> int:
         """动态添加文档（联网搜索结果）并持久化"""
@@ -100,7 +103,7 @@ class TravelKnowledgeBase:
         chunks = self.text_splitter.split_documents(documents)
         if chunks:
             self.vector_store.add_documents(chunks)
-            print(f"  [知识库] 新增 {len(chunks)} 条 (来源: {source})")
+            logger.info(f"新增 {len(chunks)} 条记录 | 来源: {source}")
         return len(chunks)
 
     def search(self, query: str, k: int = 3) -> list[Document]:
@@ -142,12 +145,12 @@ class TravelKnowledgeBase:
             # 全部过期 → 联网刷新
             if stale:
                 oldest = min(self._get_age_days(d) for d, _ in stale)
-                print(f"  [时效] {len(stale)} 条已过期 ({int(oldest)}天 > {WEB_CACHE_DAYS}天)，刷新中...")
+                logger.info(f"时效检查: {len(stale)} 条已过期 ({int(oldest)}天 > {WEB_CACHE_DAYS}天)，触发刷新")
 
         # 联网搜索
         from tools.search_tools import web_search, results_to_documents
 
-        print(f"  [联网] {query}")
+        logger.info(f"触发联网搜索 | query: {query[:80]}")
         web_results = web_search(query, max_results=5)
 
         if not web_results or "搜索失败" in web_results[0].get("title", ""):
