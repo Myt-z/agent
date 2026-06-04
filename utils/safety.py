@@ -126,7 +126,7 @@ class SubmitGuard:
     """
 
     def __init__(self):
-        self._locks: dict[str, float] = {}
+        self._locks: dict[str, tuple[float, float]] = {}  # key → (timestamp, timeout)
 
     def try_acquire(self, key: str, timeout: float = 120) -> bool:
         """
@@ -137,15 +137,16 @@ class SubmitGuard:
         返回: True=可以执行, False=已有相同任务在执行
         """
         now = time.time()
-        # 清理过期锁
+        # 清理过期锁（用每个锁自己的 timeout）
         for k in list(self._locks.keys()):
-            if now - self._locks[k] > timeout:
+            ts, to = self._locks[k]
+            if now - ts > to:
                 del self._locks[k]
 
         if key in self._locks:
             return False
 
-        self._locks[key] = now
+        self._locks[key] = (now, timeout)
         return True
 
     def release(self, key: str):

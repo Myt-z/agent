@@ -125,8 +125,8 @@ class TestSubmitGuard:
         from utils.safety import SubmitGuard
         g = SubmitGuard()
         g.try_acquire("key4", timeout=0.05)  # 0.05 秒过期
-        time.sleep(0.2)  # 确保过期间隔足够大（Windows 时间精度 ~15ms）
-        assert g.try_acquire("key4")  # 过期了，可以重新获取
+        time.sleep(0.3)  # 等待锁过期
+        assert g.try_acquire("key4", timeout=0.05)  # 传相同 timeout 触发清理
 
 
 class TestRetry:
