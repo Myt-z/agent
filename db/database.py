@@ -58,17 +58,32 @@ def init_db():
 
             CREATE INDEX IF NOT EXISTS idx_plans_user ON plans(user_id);
             CREATE INDEX IF NOT EXISTS idx_plans_city ON plans(city);
+
+            CREATE TABLE IF NOT EXISTS pipeline_fingerprints (
+                city         TEXT PRIMARY KEY,
+                content_hash TEXT NOT NULL,
+                last_run     TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            );
         """)
 
 
-# 应用启动时自动初始化
-init_db()
+# 延迟初始化（首次访问时建表，避免导入时报错导致 Streamlit 崩溃）
+_db_ready = False
+
+
+def ensure_db():
+    global _db_ready
+    if _db_ready:
+        return
+    init_db()
+    _db_ready = True
 
 
 # ===== 用户操作 =====
 
 def get_or_create_user(username: str) -> int:
     """根据用户名获取用户 ID，不存在则自动创建"""
+    ensure_db()
     with get_connection() as conn:
         row = conn.execute(
             "SELECT id FROM users WHERE username = ?", (username,)
@@ -86,6 +101,7 @@ def get_or_create_user(username: str) -> int:
 def save_plan(user_id: int, city: str, days: int, budget: float,
               preferences: str, result: str) -> int:
     """保存一份旅行计划，返回计划 ID"""
+    ensure_db()
     with get_connection() as conn:
         cur = conn.execute(
             """INSERT INTO plans (user_id, city, days, budget, preferences, result)
@@ -97,6 +113,7 @@ def save_plan(user_id: int, city: str, days: int, budget: float,
 
 def get_user_plans(user_id: int, limit: int = 20) -> list[dict]:
     """获取用户的最近计划列表"""
+    ensure_db()
     with get_connection() as conn:
         rows = conn.execute(
             """SELECT id, city, days, budget, preferences, created_at
@@ -109,6 +126,7 @@ def get_user_plans(user_id: int, limit: int = 20) -> list[dict]:
 
 def get_plan(plan_id: int) -> dict | None:
     """获取一份计划的完整内容"""
+    ensure_db()
     with get_connection() as conn:
         row = conn.execute(
             "SELECT * FROM plans WHERE id = ?", (plan_id,)
@@ -118,6 +136,7 @@ def get_plan(plan_id: int) -> dict | None:
 
 def get_plan_count(user_id: int) -> int:
     """统计用户生成过多少份计划"""
+    ensure_db()
     with get_connection() as conn:
         row = conn.execute(
             "SELECT COUNT(*) as cnt FROM plans WHERE user_id = ?", (user_id,)
@@ -125,14 +144,24 @@ def get_plan_count(user_id: int) -> int:
         return row["cnt"] if row else 0
 
 
-def get_popular_cities(limit: int = 5) -> list[dict]:
-    """热门目的地排名（全局）"""
+def get_popular_cities(limit: int = 5, exclude_username: str = None) -> list[dict]:
+    """热门目的地排名（全局），可排除指定用户（如游客）"""
+    ensure_db()
     with get_connection() as conn:
-        rows = conn.execute(
-            """SELECT city, COUNT(*) as cnt FROM plans
-               GROUP BY city ORDER BY cnt DESC LIMIT ?""",
-            (limit,),
-        ).fetchall()
+        if exclude_username:
+            rows = conn.execute(
+                """SELECT p.city, COUNT(*) as cnt FROM plans p
+                   INNER JOIN users u ON p.user_id = u.id
+                   WHERE u.username != ?
+                   GROUP BY p.city ORDER BY cnt DESC LIMIT ?""",
+                (exclude_username, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT city, COUNT(*) as cnt FROM plans
+                   GROUP BY city ORDER BY cnt DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -157,3 +186,30 @@ def get_top_rated_plans(limit: int = 5) -> list[dict]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ===== 数据管道指纹 =====
+
+def get_fingerprint(city: str) -> dict | None:
+    """获取某城市上次爬取的内容哈希。"""
+    ensure_db()
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT content_hash, last_run FROM pipeline_fingerprints WHERE city = ?",
+            (city,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def upsert_fingerprint(city: str, content_hash: str):
+    """更新或插入城市的内容哈希指纹。"""
+    ensure_db()
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT INTO pipeline_fingerprints (city, content_hash, last_run)
+               VALUES (?, ?, datetime('now', 'localtime'))
+               ON CONFLICT(city) DO UPDATE SET
+               content_hash = excluded.content_hash,
+               last_run = excluded.last_run""",
+            (city, content_hash),
+        )

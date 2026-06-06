@@ -5,6 +5,7 @@ rag/chroma_db/
 db/travel_planner.db
 chroma_db/
 .venv/
+venv/
 *.egg-info/
 dist/
 .idea/

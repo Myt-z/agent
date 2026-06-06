@@ -23,7 +23,11 @@ def web_search(query: str, max_results: int = 5) -> list[dict]:
             return results
     except ImportError:
         return [{"title": "错误", "body": "请先安装 ddgs: pip install ddgs", "href": ""}]
+    except (ConnectionError, TimeoutError, OSError) as e:
+        return [{"title": "搜索失败", "body": f"网络错误: {str(e)[:200]}", "href": ""}]
     except Exception as e:
+        if isinstance(e, (KeyboardInterrupt, SystemExit, MemoryError)):
+            raise
         return [{"title": "搜索失败", "body": f"错误: {str(e)[:200]}", "href": ""}]
 
 

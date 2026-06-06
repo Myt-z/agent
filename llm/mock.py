@@ -2,8 +2,10 @@
 Mock 模型 —— 开发/测试时不调用真实 API，不花钱
 
 设置 LLM_DEV_MODE=true 启用。
-返回预设回复，用于验证 Agent 调度逻辑。
+返回预设回复并模拟 tool calling，用于验证 Agent 调度逻辑。
 """
+
+from langchain_core.messages import AIMessage
 
 MOCK_RESPONSES = {
     "itinerary": """
@@ -40,36 +42,66 @@ MOCK_RESPONSES = {
 
 
 class MockChatModel:
-    """模拟 ChatModel，返回预设回复，不调 API"""
+    """模拟 ChatModel，返回预设回复并触发 tool calling 流程"""
+
+    def __init__(self):
+        self._call_count = 0
 
     def invoke(self, messages, **kwargs):
-        return self._respond(messages)
-
-    def _respond(self, messages):
+        self._call_count += 1
         content = str(messages)
-        # 根据输入内容返回不同预设
-        if "行程" in content or "itinerary" in content:
-            text = MOCK_RESPONSES["itinerary"]
-        elif "预算" in content or "budget" in content:
-            text = MOCK_RESPONSES["budget"]
-        elif "文化" in content or "culture" in content:
-            text = MOCK_RESPONSES["culture"]
-        else:
-            text = MOCK_RESPONSES["default"]
 
-        # 返回一个类似 AIMessage 的对象
-        return MockResponse(text)
+        # 第一轮：按 system_prompt 中的 SOP 顺序调用工具
+        if "第1步" in content and "plan_itinerary" in content and self._call_count <= 2:
+            return AIMessage(
+                content="",
+                tool_calls=[{
+                    "id": "mock_call_1",
+                    "name": "plan_itinerary",
+                    "args": {"city": "西安", "days": 3, "preferences": "综合体验"},
+                }],
+                response_metadata={"mock": True},
+            )
+
+        # 判断当前是哪个工具调用的返回，决定下一个工具
+        tool_results = self._extract_tool_results(messages)
+        if any("行程安排" in str(r) for r in tool_results) and "第2步" in content:
+            return AIMessage(
+                content="",
+                tool_calls=[{
+                    "id": "mock_call_2",
+                    "name": "analyze_budget",
+                    "args": {"itinerary_text": MOCK_RESPONSES["itinerary"], "total_budget": 3000},
+                }],
+                response_metadata={"mock": True},
+            )
+
+        if any("预算" in str(r) for r in tool_results) and "第3步" in content:
+            return AIMessage(
+                content="",
+                tool_calls=[{
+                    "id": "mock_call_3",
+                    "name": "explain_culture",
+                    "args": {"city": "西安", "topics": "历史文化,风俗礼仪"},
+                }],
+                response_metadata={"mock": True},
+            )
+
+        # 最终汇总回复
+        return AIMessage(
+            content=f"# 西安 3日游完整计划\n\n{MOCK_RESPONSES['itinerary']}\n\n{MOCK_RESPONSES['budget']}\n\n{MOCK_RESPONSES['culture']}\n\n（Mock 模式 —— 已验证 Agent 调度逻辑全部正常）",
+            response_metadata={"mock": True, "model": "mock-model"},
+        )
+
+    def _extract_tool_results(self, messages):
+        results = []
+        for m in messages if isinstance(messages, list) else messages.get("messages", []):
+            if hasattr(m, "type") and m.type == "tool":
+                results.append(getattr(m, "content", ""))
+        return results
 
     def bind_tools(self, tools):
         return self
 
     def __str__(self):
-        return "MockChatModel (dev mode, no API calls)"
-
-
-class MockResponse:
-    """模拟 AIMessage"""
-    def __init__(self, content):
-        self.content = content
-        self.tool_calls = []
-        self.response_metadata = {"mock": True, "model": "mock-model"}
+        return "MockChatModel (dev mode, tool-calling simulation enabled)"

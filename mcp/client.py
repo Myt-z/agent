@@ -12,6 +12,9 @@ MCP Client —— 通过子进程启动 MCP Server，发送 JSON-RPC 请求
 import subprocess
 import os
 import json
+import sys
+import threading
+from queue import Queue, Empty
 from mcp.protocol import JSONRPCRequest, parse_message
 
 
@@ -57,7 +60,7 @@ class MCPClient:
             self.process.wait()
             self.process = None
 
-    def _send_request(self, method: str, params: dict | None = None) -> dict:
+    def _send_request(self, method: str, params: dict | None = None, timeout: float = 30) -> dict:
         """发送一个 JSON-RPC 请求，返回解析后的响应"""
         if not self.process:
             raise RuntimeError("MCP Client 还没启动，先调 start()")
@@ -73,12 +76,34 @@ class MCPClient:
         self.process.stdin.write(request.to_json() + "\n")
         self.process.stdin.flush()
 
-        # 通过 stdout 读取响应
-        line = self.process.stdout.readline()
-        if not line:
+        # 通过 stdout 读取响应（线程超时，兼容 Windows）
+        result_queue: Queue = Queue()
+
+        def _read():
+            try:
+                line = self.process.stdout.readline()
+                result_queue.put(line)
+            except Exception as e:
+                result_queue.put(e)
+
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+
+        if t.is_alive():
+            raise TimeoutError(f"MCP Server 响应超时 ({timeout}s)")
+
+        try:
+            item = result_queue.get_nowait()
+        except Empty:
             raise RuntimeError("MCP Server 没有返回响应")
 
-        return parse_message(line)
+        if isinstance(item, Exception):
+            raise item
+        if not item:
+            raise RuntimeError("MCP Server 意外关闭")
+
+        return parse_message(item)
 
     def list_tools(self) -> list[dict]:
         """获取 Server 提供的所有工具"""

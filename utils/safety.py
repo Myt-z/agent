@@ -125,6 +125,8 @@ class SubmitGuard:
           guard.release("user-plan")
     """
 
+    MAX_LOCKS = 1000
+
     def __init__(self):
         self._locks: dict[str, tuple[float, float]] = {}  # key → (timestamp, timeout)
 
@@ -138,10 +140,14 @@ class SubmitGuard:
         """
         now = time.time()
         # 清理过期锁（用每个锁自己的 timeout）
-        for k in list(self._locks.keys()):
-            ts, to = self._locks[k]
-            if now - ts > to:
-                del self._locks[k]
+        expired = [k for k, (ts, to) in self._locks.items() if now - ts > to]
+        for k in expired:
+            del self._locks[k]
+
+        # 防止无限制增长
+        if len(self._locks) >= self.MAX_LOCKS:
+            oldest = min(self._locks.items(), key=lambda x: x[1][0])
+            del self._locks[oldest[0]]
 
         if key in self._locks:
             return False

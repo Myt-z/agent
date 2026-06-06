@@ -51,7 +51,6 @@ def _search_culture(query: str) -> str:
         f"[资料{i+1}]{source_tag}\n{d.page_content}"
         for i, d in enumerate(docs)
     )
-    return "\n\n".join(f"[资料{i+1}] {d.page_content}" for i, d in enumerate(docs))
 
 
 class CultureAgent:

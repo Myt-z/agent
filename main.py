@@ -37,16 +37,19 @@ def main():
     print("=" * 60)
 
     coordinator = TravelCoordinator()
-    result = coordinator.plan(
-        city=args.city,
-        days=args.days,
-        budget=args.budget,
-        preferences=args.preferences,
-    )
-
-    print("\n" + "=" * 60)
-    print(result)
-    print("=" * 60)
+    try:
+        result = coordinator.plan(
+            city=args.city,
+            days=args.days,
+            budget=args.budget,
+            preferences=args.preferences,
+        )
+        print("\n" + "=" * 60)
+        print(result)
+        print("=" * 60)
+    except Exception as e:
+        print(f"\n规划失败: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

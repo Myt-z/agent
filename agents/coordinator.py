@@ -64,9 +64,12 @@ class TravelCoordinator:
             logger.info(f"调度行程规划师 | city={city} days={days}")
             try:
                 return self.itinerary.plan(city, days, preferences)
+            except (ConnectionError, TimeoutError, OSError) as e:
+                logger.error(f"行程规划师网络错误: {e}", exc_info=True)
+                return "## 行程安排\n\n该模块暂时不可用（网络问题），请稍后重试。"
             except Exception as e:
                 logger.error(f"行程规划师执行失败: {e}", exc_info=True)
-                return "## 行程安排\n\n该模块暂时不可用，请稍后重试。建议手动搜索目的地攻略。"
+                return f"## 行程安排\n\n该模块出现意外错误（{type(e).__name__}），请检查日志。"
 
         @tool
         def analyze_budget(itinerary_text: str, total_budget: float) -> str:
@@ -78,9 +81,12 @@ class TravelCoordinator:
             logger.info(f"调度预算分析师 | budget={total_budget}")
             try:
                 return self.budget.analyze(itinerary_text, total_budget)
+            except (ConnectionError, TimeoutError, OSError) as e:
+                logger.error(f"预算分析师网络错误: {e}", exc_info=True)
+                return "## 费用预算\n\n该模块暂时不可用（网络问题），参考日均花费约 300-500 元/天。"
             except Exception as e:
                 logger.error(f"预算分析师执行失败: {e}", exc_info=True)
-                return "## 费用预算\n\n该模块暂时不可用，请稍后重试。参考日均花费约 300-500 元/天（含住宿餐饮）。"
+                return f"## 费用预算\n\n该模块出现意外错误（{type(e).__name__}），请检查日志。"
 
         @tool
         def explain_culture(city: str, topics: str) -> str:
@@ -92,9 +98,12 @@ class TravelCoordinator:
             logger.info(f"调度文化讲解员 | city={city}")
             try:
                 return self.culture.explain(city, topics)
+            except (ConnectionError, TimeoutError, OSError) as e:
+                logger.error(f"文化讲解员网络错误: {e}", exc_info=True)
+                return "## 文化贴士\n\n该模块暂时不可用（网络问题），请稍后重试。"
             except Exception as e:
                 logger.error(f"文化讲解员执行失败: {e}", exc_info=True)
-                return "## 文化贴士\n\n该模块暂时不可用，请稍后重试。建议查看当地旅游局的官方网站了解文化习俗。"
+                return f"## 文化贴士\n\n该模块出现意外错误（{type(e).__name__}），请检查日志。"
 
         # 主控模型
         self.model = create_model()

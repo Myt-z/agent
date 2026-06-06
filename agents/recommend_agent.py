@@ -16,15 +16,19 @@ from langchain_core.tools import tool
 from llm.factory import create_model
 
 from rag.knowledge_store import TravelKnowledgeBase
+import threading
 
 _kb = None
+_lock = threading.Lock()
 
 
 def _get_kb():
     global _kb
     if _kb is None:
-        _kb = TravelKnowledgeBase()
-        _kb.build()
+        with _lock:
+            if _kb is None:
+                _kb = TravelKnowledgeBase()
+                _kb.build()
     return _kb
 
 
@@ -41,6 +45,13 @@ def list_available_cities() -> str:
     for f in files:
         name = f.stem.replace("_guide", "").replace("-guide", "")
         cities.append(name)
+    # 也列出管道入库的城市
+    try:
+        from db.database import get_popular_cities
+        db_cities = [p["city"] for p in get_popular_cities(20)]
+        cities = sorted(set(cities + db_cities))
+    except Exception:
+        pass
     return "本地有详细攻略的城市：" + "、".join(cities)
 
 
